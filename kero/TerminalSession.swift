@@ -110,6 +110,19 @@ final class TerminalSession: NSObject, nonisolated ObservableObject, nonisolated
             from: [.darkAqua, .aqua]
         ) == .darkAqua
         controller.setColorScheme(isDark ? .dark : .light)
+
+        // `controller.setColorScheme` only updates the *app-level* color scheme
+        // (ghostty_app_set_color_scheme): it refreshes rendering and OSC 10/11,
+        // but does not emit the DEC mode 2031 change notification to the program
+        // running in the pane. That surface-level report is what lets an inner
+        // TUI (e.g. a multiplexer that auto-switches its own light/dark theme)
+        // follow the appearance flip live. AppTerminalView normally drives it
+        // from `viewDidChangeEffectiveAppearance`, but Kero re-themes through its
+        // own pipeline (`refreshAppearance` -> `applyTheme`), which bypasses that
+        // callback. Re-run it here so the surface color scheme (and the 2031
+        // report) stays in sync; without this, inner apps only re-detect on
+        // reattach, not on a live OS light/dark toggle.
+        terminalView.viewDidChangeEffectiveAppearance()
     }
 
     /// Stops the whole PTY job before releasing the surface. libghostty's
