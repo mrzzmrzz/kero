@@ -73,7 +73,12 @@ jobs:
 
           codesign --force --sign - --timestamp=none "$DMG_PATH"
           codesign --verify --verbose=2 "$DMG_PATH"
-          shasum -a 256 "$DMG_PATH" > "$DMG_PATH.sha256"
+          (
+            cd "$GITHUB_WORKSPACE"
+            DMG_NAME=$(basename "$DMG_PATH")
+            shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
+            shasum -a 256 -c "$DMG_NAME.sha256"
+          )
 
           echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
           echo "artifact_name=Kero-${VERSION}-arm64-adhoc" >> "$GITHUB_OUTPUT"
