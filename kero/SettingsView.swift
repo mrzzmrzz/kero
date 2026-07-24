@@ -12,7 +12,7 @@ struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var updater = Updater.shared
 
-    /// Installed fixed-pitch families (bundled default first).
+    /// Installed Font Book families (bundled default first).
     private let families = TerminalFont.selectableFamilies()
 
     var body: some View {
@@ -109,6 +109,30 @@ struct SettingsView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
+                HStack {
+                    Text("Line spacing")
+                    Slider(
+                        value: $settings.fontHeightAdjustment,
+                        in: AppSettings.fontHeightAdjustmentRange,
+                        step: 1
+                    )
+                    Text(fontHeightLabel)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, alignment: .trailing)
+                    Stepper(
+                        "",
+                        value: $settings.fontHeightAdjustment,
+                        in: AppSettings.fontHeightAdjustmentRange,
+                        step: 1
+                    )
+                    .labelsHidden()
+                }
+
+                Text("Adjusts terminal character-cell height.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
                 Toggle("Thicken font strokes", isOn: $settings.fontThicken)
                 Text("Renders terminal text with slightly heavier strokes, like classic macOS font smoothing.")
                     .font(.callout)
@@ -164,6 +188,8 @@ struct SettingsView: View {
                         && settings.fontSize == AppSettings.defaultFontSize
                         && settings.fontWidthAdjustment
                             == AppSettings.defaultFontWidthAdjustment
+                        && settings.fontHeightAdjustment
+                            == AppSettings.defaultFontHeightAdjustment
                         && !settings.fontThicken
                         && settings.theme == .system
                         && settings.themeDark == Theme.defaultDarkThemeName
@@ -188,6 +214,11 @@ struct SettingsView: View {
     private var fontWidthLabel: String {
         let width = Int(settings.fontWidthAdjustment)
         return width > 0 ? "+\(width)%" : "\(width)%"
+    }
+
+    private var fontHeightLabel: String {
+        let height = Int(settings.fontHeightAdjustment)
+        return height > 0 ? "+\(height)%" : "\(height)%"
     }
 
     /// Kero's built-in Default theme first, then every bundled theme, split

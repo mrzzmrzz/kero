@@ -77,16 +77,15 @@ enum TerminalFont {
         return NSFont(descriptor: descriptor, size: size) ?? base
     }
 
-    /// Fixed-pitch families available for the font picker, bundled default
-    /// first. The symbols-only fallback font is not a usable primary font.
+    /// Font Book families available for the font picker, bundled default
+    /// first. The symbols-only fallback font is not a usable text font.
     static func selectableFamilies() -> [String] {
         let families = NSFontManager.shared.availableFontFamilies
             .filter { family in
                 guard !family.hasPrefix("Symbols Nerd Font"),
-                      family != bundledFamily, !family.hasPrefix("."),
-                      let font = NSFontManager.shared.font(withFamily: family, traits: [], weight: 5, size: 13)
+                      family != bundledFamily, !family.hasPrefix(".")
                 else { return false }
-                return font.isFixedPitch
+                return true
             }
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
         return [bundledFamily] + families
