@@ -268,6 +268,13 @@ final class TerminalSession: NSObject, nonisolated ObservableObject, nonisolated
                     "\(TOML.number(settings.fontWidthAdjustment))%"
                 )
             }
+            if settings.fontHeightAdjustment
+                != AppSettings.defaultFontHeightAdjustment {
+                builder.withCustom(
+                    "adjust-cell-height",
+                    "\(TOML.number(settings.fontHeightAdjustment))%"
+                )
+            }
             // Set explicitly because ConfigSource.none includes the wrapper's
             // defaults before Kero's terminal configuration.
             builder.withFontThicken(settings.fontThicken)

@@ -33,6 +33,8 @@ final class AppSettings: nonisolated ObservableObject {
     static let fontSizeRange: ClosedRange<Double> = 8...32
     static let defaultFontWidthAdjustment: Double = 0
     static let fontWidthAdjustmentRange: ClosedRange<Double> = -20...20
+    static let defaultFontHeightAdjustment: Double = 0
+    static let fontHeightAdjustmentRange: ClosedRange<Double> = -20...100
 
     /// Light/dark appearance override; `system` follows macOS.
     @Published var theme: AppTheme {
@@ -80,6 +82,11 @@ final class AppSettings: nonisolated ObservableObject {
         didSet { save() }
     }
 
+    /// Ghostty's `adjust-cell-height`, expressed as a percentage adjustment.
+    @Published var fontHeightAdjustment: Double {
+        didSet { save() }
+    }
+
     /// Ghostty's `font-thicken`: render glyphs with slightly heavier strokes,
     /// like classic macOS font smoothing.
     @Published var fontThicken: Bool {
@@ -117,6 +124,11 @@ final class AppSettings: nonisolated ObservableObject {
             ?? Self.defaultFontWidthAdjustment
         fontWidthAdjustment = Self.fontWidthAdjustmentRange.contains(width)
             ? width : Self.defaultFontWidthAdjustment
+        let height = toml["font-height-adjustment"]?.double
+            ?? toml["adjust-cell-height"]?.percentage
+            ?? Self.defaultFontHeightAdjustment
+        fontHeightAdjustment = Self.fontHeightAdjustmentRange.contains(height)
+            ? height : Self.defaultFontHeightAdjustment
         fontThicken = toml["font-thicken"]?.bool ?? false
         wrapLines = toml["editor.wrap-lines"]?.bool ?? false
         restoreTerminalHistory = toml["terminal.restore-history"]?.bool ?? false
@@ -153,6 +165,7 @@ final class AppSettings: nonisolated ObservableObject {
         fontFallbackFamily = ""
         fontSize = Self.defaultFontSize
         fontWidthAdjustment = Self.defaultFontWidthAdjustment
+        fontHeightAdjustment = Self.defaultFontHeightAdjustment
         fontThicken = false
     }
 
@@ -188,6 +201,11 @@ final class AppSettings: nonisolated ObservableObject {
         if fontWidthAdjustment != Self.defaultFontWidthAdjustment {
             lines.append(
                 "font-width-adjustment = \(TOML.number(fontWidthAdjustment))"
+            )
+        }
+        if fontHeightAdjustment != Self.defaultFontHeightAdjustment {
+            lines.append(
+                "font-height-adjustment = \(TOML.number(fontHeightAdjustment))"
             )
         }
         if fontThicken {
@@ -247,6 +265,14 @@ enum TOML {
         var bool: Bool? {
             if case .bool(let b) = self { return b }
             return nil
+        }
+
+        var percentage: Double? {
+            if let double { return double }
+            guard let string else { return nil }
+            let value = string.hasSuffix("%")
+                ? String(string.dropLast()) : string
+            return Double(value)
         }
     }
 
