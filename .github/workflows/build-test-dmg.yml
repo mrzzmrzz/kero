@@ -21,7 +21,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Use the runner-compatible Xcode project format
+        run: |
+          sed -i '' 's/objectVersion = 110;/objectVersion = 77;/' kero.xcodeproj/project.pbxproj
+          grep -q 'objectVersion = 77;' kero.xcodeproj/project.pbxproj
 
       - name: Build Kero
         run: |
