@@ -6,7 +6,7 @@
 import AppKit
 import CoreText
 
-/// Editor font handling, same approach as Otty: bundle JetBrains Mono
+/// Kero font handling, same approach as Otty: bundle JetBrains Mono
 /// with the app so the default looks identical on every machine, and let
 /// the OS cascade cover glyphs the primary font lacks (CJK, symbols).
 enum TerminalFont {
@@ -25,21 +25,30 @@ enum TerminalFont {
         CTFontManagerRegisterFontURLs(urls as CFArray, .process, true, nil)
     }
 
-    /// The editor font for the current settings (family + size).
+    /// The editor font for the current settings.
     @MainActor
     static func current() -> NSFont {
         let settings = AppSettings.shared
-        return resolve(family: settings.fontFamily, size: CGFloat(settings.fontSize))
+        return resolve(
+            family: settings.fontFamily,
+            fallbackFamily: settings.fontFallbackFamily,
+            size: CGFloat(settings.fontSize)
+        )
     }
 
-    /// Resolves a family name to an editor-ready font. Empty family means
-    /// the bundled default; an unknown family falls back to it too.
+    /// Resolves the selected primary and fallback families for the editor.
+    /// Empty primary family means the bundled default; an unknown family
+    /// falls back to it too.
     ///
     /// The bundled Symbols Nerd Font is attached as a CoreText cascade
     /// entry so PUA icon glyphs (file-type symbols, git glyphs, nf-md-*)
     /// render without a user-installed patched font. JetBrains Mono covers
     /// Powerline separators itself, so those never hit the fallback.
-    static func resolve(family: String, size: CGFloat) -> NSFont {
+    static func resolve(
+        family: String,
+        fallbackFamily: String,
+        size: CGFloat
+    ) -> NSFont {
         let base: NSFont
         if !family.isEmpty, family != bundledFamily,
            let chosen = NSFontManager.shared.font(withFamily: family, traits: [], weight: 5, size: size) {
@@ -49,8 +58,21 @@ enum TerminalFont {
         } else {
             return .monospacedSystemFont(ofSize: size, weight: .regular)
         }
+
+        var cascade: [NSFontDescriptor] = []
+        if !fallbackFamily.isEmpty,
+           base.familyName != fallbackFamily,
+           let fallback = NSFontManager.shared.font(
+               withFamily: fallbackFamily,
+               traits: [],
+               weight: 5,
+               size: size
+           ) {
+            cascade.append(fallback.fontDescriptor)
+        }
+        cascade.append(NSFontDescriptor(name: symbolsFontName, size: size))
         let descriptor = base.fontDescriptor.addingAttributes([
-            .cascadeList: [NSFontDescriptor(name: symbolsFontName, size: size)]
+            .cascadeList: cascade
         ])
         return NSFont(descriptor: descriptor, size: size) ?? base
     }

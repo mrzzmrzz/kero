@@ -43,16 +43,24 @@ struct SettingsView: View {
                         Text(name).tag(name)
                     }
                 }
-                Text("Colors for Kero's window chrome and file previews. Terminal colors come from Ghostty.")
+                Text("Colors for the whole window, one theme per appearance.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Editor Font") {
-                Picker("Family", selection: $settings.fontFamily) {
+            Section("Font") {
+                Picker("Primary", selection: $settings.fontFamily) {
                     Text("\(TerminalFont.bundledFamily) (Bundled)").tag("")
                     Divider()
                     ForEach(families.dropFirst(), id: \.self) { family in
+                        Text(family).tag(family)
+                    }
+                }
+
+                Picker("Fallback", selection: $settings.fontFallbackFamily) {
+                    Text("Automatic").tag("")
+                    Divider()
+                    ForEach(families, id: \.self) { family in
                         Text(family).tag(family)
                     }
                 }
@@ -76,6 +84,35 @@ struct SettingsView: View {
                     )
                     .labelsHidden()
                 }
+
+                HStack {
+                    Text("Width")
+                    Slider(
+                        value: $settings.fontWidthAdjustment,
+                        in: AppSettings.fontWidthAdjustmentRange,
+                        step: 1
+                    )
+                    Text(fontWidthLabel)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, alignment: .trailing)
+                    Stepper(
+                        "",
+                        value: $settings.fontWidthAdjustment,
+                        in: AppSettings.fontWidthAdjustmentRange,
+                        step: 1
+                    )
+                    .labelsHidden()
+                }
+
+                Text("Adjusts terminal character-cell width.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Thicken font strokes", isOn: $settings.fontThicken)
+                Text("Renders terminal text with slightly heavier strokes, like classic macOS font smoothing.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Preview") {
@@ -91,9 +128,6 @@ struct SettingsView: View {
             }
 
             Section("Terminal") {
-                Text("Terminal settings load from Ghostty's standard configuration files.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
                 Toggle(
                     "Restore session history on relaunch",
                     isOn: $settings.restoreTerminalHistory
@@ -126,7 +160,11 @@ struct SettingsView: View {
                         settings.resetToDefaults()
                     }
                     .disabled(settings.fontFamily.isEmpty
+                        && settings.fontFallbackFamily.isEmpty
                         && settings.fontSize == AppSettings.defaultFontSize
+                        && settings.fontWidthAdjustment
+                            == AppSettings.defaultFontWidthAdjustment
+                        && !settings.fontThicken
                         && settings.theme == .system
                         && settings.themeDark == Theme.defaultDarkThemeName
                         && settings.themeLight == Theme.defaultLightThemeName
@@ -140,7 +178,16 @@ struct SettingsView: View {
     }
 
     private var previewFont: NSFont {
-        TerminalFont.resolve(family: settings.fontFamily, size: CGFloat(settings.fontSize))
+        TerminalFont.resolve(
+            family: settings.fontFamily,
+            fallbackFamily: settings.fontFallbackFamily,
+            size: CGFloat(settings.fontSize)
+        )
+    }
+
+    private var fontWidthLabel: String {
+        let width = Int(settings.fontWidthAdjustment)
+        return width > 0 ? "+\(width)%" : "\(width)%"
     }
 
     /// Kero's built-in Default theme first, then every bundled theme, split

@@ -31,6 +31,8 @@ final class AppSettings: nonisolated ObservableObject {
 
     static let defaultFontSize: Double = 13
     static let fontSizeRange: ClosedRange<Double> = 8...32
+    static let defaultFontWidthAdjustment: Double = 0
+    static let fontWidthAdjustmentRange: ClosedRange<Double> = -20...20
 
     /// Light/dark appearance override; `system` follows macOS.
     @Published var theme: AppTheme {
@@ -57,13 +59,30 @@ final class AppSettings: nonisolated ObservableObject {
         }
     }
 
-    /// Editor font family name; empty string means the bundled default
-    /// (JetBrains Mono).
+    /// Kero font family name; empty string means the bundled default
+    /// (JetBrains Mono). Used by both the terminal and file editor.
     @Published var fontFamily: String {
         didSet { save() }
     }
 
+    /// Optional fallback family used after the primary face. Empty string
+    /// leaves fallback selection to the system.
+    @Published var fontFallbackFamily: String {
+        didSet { save() }
+    }
+
     @Published var fontSize: Double {
+        didSet { save() }
+    }
+
+    /// Ghostty's `adjust-cell-width`, expressed as a percentage adjustment.
+    @Published var fontWidthAdjustment: Double {
+        didSet { save() }
+    }
+
+    /// Ghostty's `font-thicken`: render glyphs with slightly heavier strokes,
+    /// like classic macOS font smoothing.
+    @Published var fontThicken: Bool {
         didSet { save() }
     }
 
@@ -91,8 +110,14 @@ final class AppSettings: nonisolated ObservableObject {
             toml["theme-light"]?.string, fallback: Theme.defaultLightThemeName
         )
         fontFamily = toml["font-family"]?.string ?? ""
+        fontFallbackFamily = toml["font-family-fallback"]?.string ?? ""
         let size = toml["font-size"]?.double ?? Self.defaultFontSize
         fontSize = Self.fontSizeRange.contains(size) ? size : Self.defaultFontSize
+        let width = toml["font-width-adjustment"]?.double
+            ?? Self.defaultFontWidthAdjustment
+        fontWidthAdjustment = Self.fontWidthAdjustmentRange.contains(width)
+            ? width : Self.defaultFontWidthAdjustment
+        fontThicken = toml["font-thicken"]?.bool ?? false
         wrapLines = toml["editor.wrap-lines"]?.bool ?? false
         restoreTerminalHistory = toml["terminal.restore-history"]?.bool ?? false
         applyAppearance()
@@ -125,7 +150,10 @@ final class AppSettings: nonisolated ObservableObject {
 
     func resetFont() {
         fontFamily = ""
+        fontFallbackFamily = ""
         fontSize = Self.defaultFontSize
+        fontWidthAdjustment = Self.defaultFontWidthAdjustment
+        fontThicken = false
     }
 
     func resetToDefaults() {
@@ -153,7 +181,18 @@ final class AppSettings: nonisolated ObservableObject {
         if !fontFamily.isEmpty {
             lines.append("font-family = \(TOML.quote(fontFamily))")
         }
+        if !fontFallbackFamily.isEmpty {
+            lines.append("font-family-fallback = \(TOML.quote(fontFallbackFamily))")
+        }
         lines.append("font-size = \(TOML.number(fontSize))")
+        if fontWidthAdjustment != Self.defaultFontWidthAdjustment {
+            lines.append(
+                "font-width-adjustment = \(TOML.number(fontWidthAdjustment))"
+            )
+        }
+        if fontThicken {
+            lines.append("font-thicken = true")
+        }
         if wrapLines {
             lines.append("editor.wrap-lines = true")
         }

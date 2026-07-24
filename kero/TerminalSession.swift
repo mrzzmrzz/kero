@@ -8,6 +8,7 @@ import Combine
 import Darwin
 import Foundation
 import GhosttyTerminal
+import GhosttyTheme
 
 /// One login shell rendered by one long-lived libghostty surface. SwiftUI only
 /// reparents the same `KeroTerminalView`, so PTY state, selection, and
@@ -57,8 +58,8 @@ final class TerminalSession: NSObject, nonisolated ObservableObject, nonisolated
         title = (shellPath as NSString).lastPathComponent
 
         controller = TerminalController(
-            configSource: .defaultFiles(),
-            theme: .init(),
+            configSource: .none,
+            theme: Self.ghosttyTheme(),
             terminalConfiguration: Self.terminalConfiguration(command: launchCommand)
         )
         let terminalView = KeroTerminalView(
@@ -97,11 +98,13 @@ final class TerminalSession: NSObject, nonisolated ObservableObject, nonisolated
         }
     }
 
-    /// Keeps libghostty's light/dark selection aligned with the app.
+    /// Reconfigures libghostty in place when appearance or font settings
+    /// change. Ghostty also uses these colors for OSC 10/11 queries.
     func applyTheme() {
         _ = controller.setTerminalConfiguration(
             Self.terminalConfiguration(command: launchCommand)
         )
+        _ = controller.setTheme(Self.ghosttyTheme())
         let isDark = NSApp.effectiveAppearance.bestMatch(
             from: [.darkAqua, .aqua]
         ) == .darkAqua
@@ -245,9 +248,33 @@ final class TerminalSession: NSObject, nonisolated ObservableObject, nonisolated
     // MARK: - Ghostty configuration
 
     private static func terminalConfiguration(command: String) -> TerminalConfiguration {
+        let settings = AppSettings.shared
+        let family = settings.fontFamily.isEmpty
+            ? TerminalFont.bundledFamily : settings.fontFamily
         return TerminalConfiguration { builder in
-            // Font, colors, cursor, padding, and other appearance settings
-            // come directly from Ghostty's standard user config files.
+            builder.withFontFamily(family)
+            if !settings.fontFallbackFamily.isEmpty,
+               settings.fontFallbackFamily != family {
+                builder.withCustom("font-family", settings.fontFallbackFamily)
+            }
+            // Keep Kero's bundled icon font last in the fallback list.
+            builder.withCustom("font-family", "Symbols Nerd Font Mono")
+            builder.withFontSize(Float(settings.fontSize))
+            if settings.fontWidthAdjustment
+                != AppSettings.defaultFontWidthAdjustment {
+                builder.withCustom(
+                    "adjust-cell-width",
+                    "\(TOML.number(settings.fontWidthAdjustment))%"
+                )
+            }
+            // Set explicitly because ConfigSource.none includes the wrapper's
+            // defaults before Kero's terminal configuration.
+            builder.withFontThicken(settings.fontThicken)
+            builder.withCursorStyle(.block)
+            builder.withCursorStyleBlink(true)
+            builder.withWindowPaddingX(10)
+            builder.withWindowPaddingY(8)
+            builder.withCustom("window-padding-balance", "true")
             builder.withCustom("window-padding-color", "extend")
             // Kero owns the app-level command map. Leaving Ghostty's defaults
             // installed makes its performKeyEquivalent intercept shortcuts
@@ -278,6 +305,7 @@ final class TerminalSession: NSObject, nonisolated ObservableObject, nonisolated
             // least that many normally sized rows while keeping synchronous
             // history exports bounded.
             builder.withCustom("scrollback-limit", "4194304")
+            builder.withCustom("macos-option-as-alt", "true")
             builder.withCustom("scrollbar", "never")
             // Terminal-program clipboard access via OSC 52, matching the
             // Ghostty app defaults: reads prompt the user per request
@@ -295,6 +323,13 @@ final class TerminalSession: NSObject, nonisolated ObservableObject, nonisolated
             builder.withCustom("clipboard-write", "allow")
             builder.withCustom("clipboard-paste-protection", "true")
         }
+    }
+
+    private static func ghosttyTheme() -> GhosttyTerminal.TerminalTheme {
+        GhosttyTerminal.TerminalTheme(
+            light: Theme.terminal(dark: false).toTerminalConfiguration(),
+            dark: Theme.terminal(dark: true).toTerminalConfiguration()
+        )
     }
 
     private static func surfaceEnvironment() -> [String: String] {
