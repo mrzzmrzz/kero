@@ -40,6 +40,10 @@ final class TerminalSession: NSObject, nonisolated ObservableObject, nonisolated
     private var lastScrollbar: TerminalScrollbar?
     private var lastHistorySnapshot: String?
     private var isTerminating = false
+    /// Last light/dark value pushed to the *surface* color scheme, so the DEC
+    /// 2031 report is re-emitted only on an actual transition — applyTheme()
+    /// also runs on font/size/config edits.
+    private var appliedColorSchemeIsDark: Bool?
 
     init(initialDirectory: String? = nil, restoredHistory: String? = nil) {
         let shellPath = Self.loginShell()
@@ -122,7 +126,15 @@ final class TerminalSession: NSObject, nonisolated ObservableObject, nonisolated
         // callback. Re-run it here so the surface color scheme (and the 2031
         // report) stays in sync; without this, inner apps only re-detect on
         // reattach, not on a live OS light/dark toggle.
-        terminalView.viewDidChangeEffectiveAppearance()
+        //
+        // Gate on an actual transition: applyTheme() also runs on font/size/
+        // config edits (including live slider drags), and updateColorScheme()
+        // has no unchanged-scheme guard, so firing unconditionally would re-emit
+        // the 2031 report to the child on every unrelated settings change.
+        if appliedColorSchemeIsDark != isDark {
+            appliedColorSchemeIsDark = isDark
+            terminalView.viewDidChangeEffectiveAppearance()
+        }
     }
 
     /// Stops the whole PTY job before releasing the surface. libghostty's
