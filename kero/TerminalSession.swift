@@ -40,6 +40,10 @@ final class TerminalSession: NSObject, nonisolated ObservableObject, nonisolated
     private var lastScrollbar: TerminalScrollbar?
     private var lastHistorySnapshot: String?
     private var isTerminating = false
+    /// Last light/dark value pushed to the *surface* color scheme, so the DEC
+    /// 2031 report is re-emitted only on an actual transition — applyTheme()
+    /// also runs on font/size/config edits.
+    private var appliedColorSchemeIsDark: Bool?
 
     init(initialDirectory: String? = nil, restoredHistory: String? = nil) {
         let shellPath = Self.loginShell()
@@ -110,6 +114,27 @@ final class TerminalSession: NSObject, nonisolated ObservableObject, nonisolated
             from: [.darkAqua, .aqua]
         ) == .darkAqua
         controller.setColorScheme(isDark ? .dark : .light)
+
+        // `controller.setColorScheme` only updates the *app-level* color scheme
+        // (ghostty_app_set_color_scheme): it refreshes rendering and OSC 10/11,
+        // but does not emit the DEC mode 2031 change notification to the program
+        // running in the pane. That surface-level report is what lets an inner
+        // TUI (e.g. a multiplexer that auto-switches its own light/dark theme)
+        // follow the appearance flip live. AppTerminalView normally drives it
+        // from `viewDidChangeEffectiveAppearance`, but Kero re-themes through its
+        // own pipeline (`refreshAppearance` -> `applyTheme`), which bypasses that
+        // callback. Re-run it here so the surface color scheme (and the 2031
+        // report) stays in sync; without this, inner apps only re-detect on
+        // reattach, not on a live OS light/dark toggle.
+        //
+        // Gate on an actual transition: applyTheme() also runs on font/size/
+        // config edits (including live slider drags), and updateColorScheme()
+        // has no unchanged-scheme guard, so firing unconditionally would re-emit
+        // the 2031 report to the child on every unrelated settings change.
+        if appliedColorSchemeIsDark != isDark {
+            appliedColorSchemeIsDark = isDark
+            terminalView.viewDidChangeEffectiveAppearance()
+        }
     }
 
     /// Stops the whole PTY job before releasing the surface. libghostty's
