@@ -1,0 +1,99 @@
+name: Build Test DMG
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-test-dmg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ARM64 ad-hoc DMG
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Use the runner-compatible Xcode project format
+        run: |
+          sed -i '' 's/objectVersion = 110;/objectVersion = 77;/' kero.xcodeproj/project.pbxproj
+          grep -q 'objectVersion = 77;' kero.xcodeproj/project.pbxproj
+
+      - name: Build Kero
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project kero.xcodeproj \
+            -scheme kero \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=YES \
+            DEVELOPMENT_TEAM= \
+            build
+
+      - name: Package DMG
+        id: package
+        run: |
+          set -euo pipefail
+
+          APP_PATH="$GITHUB_WORKSPACE/build/DerivedData/Build/Products/Release/Kero.app"
+          test -d "$APP_PATH"
+
+          codesign --force --deep --sign - --timestamp=none "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")
+          STAGING_PATH="$RUNNER_TEMP/kero-dmg"
+          DMG_PATH="$GITHUB_WORKSPACE/Kero-${VERSION}-arm64-adhoc.dmg"
+
+          mkdir -p "$STAGING_PATH"
+          ditto "$APP_PATH" "$STAGING_PATH/Kero.app"
+          ln -s /Applications "$STAGING_PATH/Applications"
+
+          hdiutil create \
+            -volname "Kero ${VERSION}" \
+            -srcfolder "$STAGING_PATH" \
+            -ov \
+            -format UDZO \
+            "$DMG_PATH"
+
+          codesign --force --sign - --timestamp=none "$DMG_PATH"
+          codesign --verify --verbose=2 "$DMG_PATH"
+          shasum -a 256 "$DMG_PATH" > "$DMG_PATH.sha256"
+
+          echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=Kero-${VERSION}-arm64-adhoc" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Test DMG"
+            echo
+            echo "- Architecture: ARM64"
+            echo "- Signature: ad hoc"
+            echo "- Notarized: no"
+            echo "- SHA-256: $(cut -d ' ' -f 1 "$DMG_PATH.sha256")"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: |
+            ${{ steps.package.outputs.dmg_path }}
+            ${{ steps.package.outputs.dmg_path }}.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
